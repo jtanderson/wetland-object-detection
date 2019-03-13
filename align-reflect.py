@@ -6,32 +6,43 @@ import os, glob
 import matplotlib.pyplot as plt
 import micasense.capture as capture
 import multiprocessing
+import micasense.image as image
 import micasense.imageutils as imageutils
 
 exiftoolPath = None
 if os.name == 'nt':
     exiftoolPath = 'C:/exiftool/exiftool.exe'
 
+imagesPath = os.path.join('.', 'MicasenseImagesPanels')
+#allImages = os.listdir(imagesPath)
+PanelNames = glob.glob( os.path.join('.', 'MicasenseImagesPanels', 'IMG_0009_*.tif') )
 
-imageName = os.path.join('.', 'MicasenseImages', 'IMG_0013_1.tif')
+for panelName in PanelNames:
+	meta = metadata.Metadata(panelName, exiftoolPath)
+	img = image.Image(panelName)
+	#print(dir(meta))
+	print("Panel: {}".format(panelName))
+	print('Band: {} / {}nm'.format(img.meta.band_name(), img.meta.bandwidth()))
+#%%
 # get image metadata
-meta = metadata.Metadata(imageName, exiftoolPath=exiftoolPath)
-imageRaw=plt.imread(imageName)
-radianceimage, _, _, _ = micasense.utils.raw_image_to_radiance(meta, imageRaw)
-plotutils.plotwithcolorbar(radianceimage)
-print(dir(meta))
-print('{0} {1} firmware version: {2}'.format(meta.camera_make(), meta.camera_model(), meta.firmware_version()))
-
-#TODO update the rest
-# print('Exposure Time: {0} seconds'.format(meta.get_item('EXIF:ExposureTime')))
-# print('Imager Gain: {0}'.format(meta.get_item('EXIF:ISOSpeed')/100.0))
-# print('Size: {0}x{1} pixels'.format(meta.get_item('EXIF:ImageWidth'),meta.get_item('EXIF:ImageHeight')))
-#print('Band Name: {0}'.format(bandName))
-# print('Center Wavelength: {0} nm'.format(meta.get_item('XMP:CentralWavelength')))
-# print('Bandwidth: {0} nm'.format(meta.get_item('XMP:WavelengthFWHM')))
-# print('Capture ID: {0}'.format(meta.get_item('XMP:CaptureId')))
-# print('Flight ID: {0}'.format(meta.get_item('XMP:FlightId')))
-# print('Focal Length: {0}'.format(meta.get_item('XMP:FocalLength')))
+# for imageName in allImages:
+# 	meta = metadata.Metadata(imageName, exiftoolPath)
+# 	imageRaw=plt.imread(imageName)
+# 	radianceimage, _, _, _ = micasense.utils.raw_image_to_radiance(meta, imageRaw)
+# 	#plotutils.plotwithcolorbar(radianceimage)
+# 	print(dir(meta))
+# 	print('{0} {1} firmware version: {2}'.format(meta.camera_make(), meta.camera_model(), meta.firmware_version()))
+#
+# 	#TODO update the rest
+# 	print('Exposure Time: {0} seconds'.format(meta.get_item('EXIF:ExposureTime')))
+# 	print('Imager Gain: {0}'.format(meta.get_item('EXIF:ISOSpeed')/100.0))
+# 	print('Size: {0}x{1} pixels'.format(meta.get_item('EXIF:ImageWidth'),meta.get_item('EXIF:ImageHeight')))
+# 	print('Band Name: {0}'.format(meta.band_namebandName()))
+# 	print('Center Wavelength: {0} nm'.format(meta.get_item('XMP:CentralWavelength')))
+# 	print('Bandwidth: {0} nm'.format(meta.get_item('XMP:WavelengthFWHM')))
+# 	print('Capture ID: {0}'.format(meta.get_item('XMP:CaptureId')))
+# 	print('Flight ID: {0}'.format(meta.get_item('XMP:FlightId')))
+# 	print('Focal Length: {0}'.format(meta.get_item('XMP:FocalLength')))
 
 #%%
 ##########################################################
@@ -41,8 +52,8 @@ imagePath = os.path.join('.','Micasenseimages')
 imageNames = glob.glob(os.path.join(imagePath,'IMG_0013_*.tif'))
 capture = capture.Capture.from_filelist(imageNames)
 panel_reflectance_by_band = [0.67, 0.69, 0.68, 0.61, 0.67] #RedEdge band_index order
-# panel_irradiance = panelCap.panel_irradiance(panel_reflectance_by_band)
-# capture.plot_undistorted_reflectance(panel_irradiance)
+panel_irradiance = panelCap.panel_irradiance(panel_reflectance_by_band)
+capture.plot_undistorted_reflectance(panel_irradiance)
 #
 print("Alinging images. Depending on settings this can take from a few seconds to many minutes")
 # Increase max_iterations to 1000+ for better results, but much longer runtimes
