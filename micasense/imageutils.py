@@ -66,7 +66,7 @@ def align(pair):
     epsilon_threshold = pair['epsilon_threshold']
     ref_index = pair['ref_index']
     match_index = pair['match_index']
-    
+
     # Initialize the matrix to identity
     if warp_mode == cv2.MOTION_HOMOGRAPHY:
         warp_matrix = np.eye(3, 3, dtype=np.float32)
@@ -75,10 +75,10 @@ def align(pair):
 
     # Terminate the optimizer if either the max iterations or the threshold are reached
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, max_iterations, epsilon_threshold)
-    
+
     if ref_index != match_index:
         (cc, warp_matrix) = cv2.findTransformECC(
-            gradient(pair['ref_image']), 
+            gradient(pair['ref_image']),
             gradient(pair['match_image']),
             warp_matrix,
             warp_mode,
@@ -104,15 +104,17 @@ def align_capture(capture, ref_index=4, warp_mode=cv2.MOTION_AFFINE, max_iterati
                                 'max_iterations': max_iterations,
                                 'epsilon_threshold': epsilon_threshold,
                                 'ref_index':ref_index,
-                                'ref_image': ref_img, 
+                                'ref_image': ref_img,
                                 'match_index':img.band_index,
                                 'match_image':img.undistorted(img.reflectance()).astype('float32')})
 
     warp_matrices = [None]*len(alignment_pairs)
-    
+
     #required to work across linux/mac/windows, see https://stackoverflow.com/questions/47852237
-    multiprocessing.set_start_method('spawn') 
-    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+    #multiprocessing.set_start_method('spawn')
+    pool = multiprocessing.Pool(processes=1)
+	#processes = multiprocessing.cpu_count()
+
     for i,mat in enumerate(pool.imap_unordered(align, alignment_pairs)):
         warp_matrices[mat['match_index']] = mat['warp_matrix']
         print("Finished aligning band {}".format(mat['match_index']))
@@ -121,26 +123,26 @@ def align_capture(capture, ref_index=4, warp_mode=cv2.MOTION_AFFINE, max_iterati
 
     return warp_matrices, alignment_pairs
 
-#apply homography to create an aligned stack 
+#apply homography to create an aligned stack
 def aligned_capture(warp_matrices, alignment_pairs, dimension_tuple):
     height, width = alignment_pairs[0]['ref_image'].shape
     im_aligned = np.zeros((height,width,len(warp_matrices)), dtype=np.float32 )
-    
+
     for i in range(0,len(warp_matrices)):
         warp_mode = alignment_pairs[i]['warp_mode']
-        
+
         if alignment_pairs[i]['match_index'] == alignment_pairs[i]['ref_index']:
             im_aligned[:,:,i] = alignment_pairs[i]['match_image']
         else:
             if warp_mode != cv2.MOTION_HOMOGRAPHY:
-                im_aligned[:,:,i] = cv2.warpAffine(alignment_pairs[i]['match_image'], 
-                                                warp_matrices[i], 
-                                                (width,height), 
+                im_aligned[:,:,i] = cv2.warpAffine(alignment_pairs[i]['match_image'],
+                                                warp_matrices[i],
+                                                (width,height),
                                                 flags=cv2.INTER_LANCZOS4 + cv2.WARP_INVERSE_MAP)
             else:
-                im_aligned[:,:,i] = cv2.warpPerspective(alignment_pairs[i]['match_image'], 
-                                                    warp_matrices[i], 
-                                                    (width,height), 
+                im_aligned[:,:,i] = cv2.warpPerspective(alignment_pairs[i]['match_image'],
+                                                    warp_matrices[i],
+                                                    (width,height),
                                                     flags=cv2.INTER_LANCZOS4 + cv2.WARP_INVERSE_MAP)
     (left, top, w, h) = tuple(int(i) for i in dimension_tuple)
     im_cropped = im_aligned[top:top+h, left:left+w][:]
@@ -158,7 +160,7 @@ class BoundPoint(object):
     def __repr__(self):
         return self.__str__()
 
-class Bounds(object): 
+class Bounds(object):
     def __init__(self):
         arbitrary_large_value = 100000000
         self.max = BoundPoint(-arbitrary_large_value, -arbitrary_large_value)
@@ -171,24 +173,24 @@ class Bounds(object):
         return self.__str__()
 
 def find_crop_bounds(image_size, registration_transforms, lens_distortions, camera_matrices):
-    """Compute the crop rectangle to be applied to a set of images after 
-    registration such that no pixel in the resulting stack of images will 
+    """Compute the crop rectangle to be applied to a set of images after
+    registration such that no pixel in the resulting stack of images will
     include a blank value for any of the bands
 
-    Args: 
+    Args:
     image_size - Tuple containing (width, height) of the image
-    registration_transforms - a list of affine transforms applied to 
-    register the image. It is required. 
+    registration_transforms - a list of affine transforms applied to
+    register the image. It is required.
     lens_distortion - A set of lens distortion coefficients to be applied
     prior to the registration transform. If provided, it must be the same
-    length as registration_transforms. Each element in the list should be 
-    a dict with the following keys: 'cx', 'cy', 'fx', 'fy', 'p', 'k'. 
+    length as registration_transforms. Each element in the list should be
+    a dict with the following keys: 'cx', 'cy', 'fx', 'fy', 'p', 'k'.
 
     """
 
     bounds = [get_inner_rect(image_size, a, d, c) for a, d, c in zip(registration_transforms, lens_distortions, camera_matrices)]
     combined_bounds = get_combined_bounds(bounds, image_size)
-    
+
     left = round(combined_bounds.min.x)
     top = round(combined_bounds.min.y)
     width = round(combined_bounds.max.x - combined_bounds.min.x + 0.5)
@@ -246,7 +248,7 @@ def get_combined_bounds(bounds, image_size):
 
     return final
 
-def min_max(pts): 
+def min_max(pts):
     bounds = Bounds()
     for p in pts:
         if p[0] > bounds.max.x:
@@ -264,7 +266,7 @@ def map_points(pts, image_size, affine, distortion_coeffs, camera_matrix):
 
     # extra dimension makes opencv happy
     pts = np.array([pts], dtype=np.float)
-    
+
     new_cam_mat, _ = cv2.getOptimalNewCameraMatrix(camera_matrix, distortion_coeffs, image_size, 1)
     new_pts = cv2.undistortPoints(pts, camera_matrix, distortion_coeffs, P=new_cam_mat)
 

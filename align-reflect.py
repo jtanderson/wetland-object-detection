@@ -1,28 +1,37 @@
 import micasense.utils
 import micasense.plotutils as plotutils
 import micasense.metadata as metadata
-import os, glob
+import os
+import glob
 import micasense
 import micasense.capture as capture
 import multiprocessing
 import micasense.image as image
 import micasense.imageutils as imageutils
+import imageio
 import matplotlib.pyplot as plt
+import numpy as np
+import cv2
 
 exiftoolPath = None
 if os.name == 'nt':
-    exiftoolPath = 'C:/exiftool/exiftool.exe'
+	exiftoolPath = 'C:/exiftool/exiftool.exe'
 
 imagesPath = os.path.join('.', 'MicasenseImagesPanels')
-#allImages = os.listdir(imagesPath)
-panelNames = glob.glob( os.path.join('.', 'MicasenseImagesPanels', 'IMG_0009_*.tif') )
-
+# allImages = os.listdir(imagesPath)
+cwd = os.getcwd()
+panelPath = os.path.join(
+	'.', 'MicasenseImagesPanels', 'IMG_0009_*.tif')
+panelNames = glob.glob(os.path.join(
+	'.', 'MicasenseImagesPanels', 'IMG_0009_*.tif'))
 # for panelName in panelNames:
 # 	meta = metadata.Metadata(panelName, exiftoolPath)
 # 	img = image.Image(panelName)
-# 	#print(dir(meta))
+# 	print(dir(meta))
 # 	print("Panel: {}".format(panelName))
 # 	print('Band: {} / {}nm'.format(img.meta.band_name(), img.meta.bandwidth()))
+# 	print('Capture ID: {0}'.format(img.meta.get_item('XMP:CaptureId')))
+# 	print('Flight ID: {0}'.format(meta.get_item('XMP:FlightId')))
 
 # get image metadata
 # for imageName in allImages:
@@ -44,66 +53,102 @@ panelNames = glob.glob( os.path.join('.', 'MicasenseImagesPanels', 'IMG_0009_*.t
 # 	print('Flight ID: {0}'.format(meta.get_item('XMP:FlightId')))
 # 	print('Focal Length: {0}'.format(meta.get_item('XMP:FocalLength')))
 
-
 ##########################################################
 #				Alignment	WIP
+#		enter the number of the first image that isn't a calibration panelNames
+#		then it gets the 5 band images of that group number
+#
+#
 ######################################################
 
-for i in range(13, 196):
-	imagePath = os.path.join('.','Micasenseimages')
-	imagesStr = "IMG_" + ("0" if i >= 100 else "00") + str(i) + "_*.tif"
-	imageNames = glob.glob(os.path.join(imagePath,imagesStr))
+firstNonPanelImg = 13
+numImages = 196
+
+captures = []
+for i in range(numImages):
+	imagePath = os.path.join('.', 'MicasenseImagesPanels')
+	imagesStr = "IMG_" + ("0" if i >= 100 else "00") + str(i + firstNonPanelImg) + "_*.tif"
+	print("\n\n\n")
+	print(imagesStr)
+	print("\n")
+	imageNames = glob.glob(os.path.join(imagePath, imagesStr))
 	print(imageNames)
 
-
 	panelCap = capture.Capture.from_filelist(panelNames)
-	capture = capture.Capture.from_filelist(imageNames)
-	panel_reflectance_by_band = [0.67, 0.69, 0.68, 0.61, 0.67] #RedEdge band_index order
+	captures.append(capture.Capture.from_filelist(imageNames))
+	panel_reflectance_by_band = [0.67, 0.69, 0.68,
+								 0.61, 0.67]  # RedEdge band_index order
 	panel_irradiance = panelCap.panel_irradiance(panel_reflectance_by_band)
-	capture.plot_undistorted_reflectance(panel_irradiance)
+	captures[i].plot_undistorted_reflectance(panel_irradiance)
 	#
 	print("Alinging images. Depending on settings this can take from a few seconds to many minutes")
 	# Increase max_iterations to 1000+ for better results, but much longer runtimes
-	warp_matrices, alignment_pairs = imageutils.align_capture(capture, max_iterations=100)
+	warp_matrices, alignment_pairs = imageutils.align_capture(
+		captures[i], max_iterations=100)
 
 	print("Finished Aligning, warp matrices:")
-	for i,mat in enumerate(warp_matrices):
-	    print("Band {}:\n{}".format(i,mat))
+	for j, mat in enumerate(warp_matrices):
+		print("Band {}:\n{}".format(j, mat))
 	# ## Crop Aligned Images
 	# After finding image alignments we may need to remove pixels around the edges which aren't present in every image in the capture.  To do this we use the affine transforms found above and the image distortions from the image metadata.  OpenCV provides a couple of handy helpers for this task in the  `cv2.undistortPoints()` and `cv2.transform()` methods.  These methods takes a set of pixel coordinates and apply our undistortion matrix and our affine transform, respectively.  So, just as we did when registering the images, we first apply the undistortion process the coordinates of the image borders, then we apply the affine transformation to that result. The resulting pixel coordinates tell us where the image borders end up after this pair of transformations, and we can then crop the resultant image to these coordinates.
-	# %%
 	dist_coeffs = []
 	cam_mats = []
 	# create lists of the distortion coefficients and camera matricies
-	for i,img in enumerate(capture.images):
-	    dist_coeffs.append(img.cv2_distortion_coeff())
-	    cam_mats.append(img.cv2_camera_matrix())
+	for j, img in enumerate(captures[i].images):
+		dist_coeffs.append(img.cv2_distortion_coeff())
+		cam_mats.append(img.cv2_camera_matrix())
 	# cropped_dimensions is of the form:
 	# (first column with overlapping pixels present in all images,
 	#  first row with overlapping pixels present in all images,
 	#  number of columns with overlapping pixels in all images,
 	#  number of rows with overlapping pixels in all images   )
-	cropped_dimensions = imageutils.find_crop_bounds(capture.images[0].size(),
-	                                                 warp_matrices,
-	                                                 dist_coeffs,
-	                                                 cam_mats)
-	# %% markdown
+	cropped_dimensions = imageutils.find_crop_bounds(captures[i].images[0].size(),
+													 warp_matrices,
+													 dist_coeffs,
+													 cam_mats)
 	# ## Visualize Aligned Images
 	#
 	# Once the transformation has been found, it can be verified by composting the aligned images to check alignment. The image 'stack' containing all bands can also be exported to a multi-band TIFF file for viewing in extrernal software such as QGIS.  Useful componsites are a naturally colored RGB as well as color infrared, or CIR.
-	# %%
-	im_aligned = imageutils.aligned_capture(warp_matrices, alignment_pairs, cropped_dimensions)
+	im_aligned = imageutils.aligned_capture(
+		warp_matrices, alignment_pairs, cropped_dimensions)
 	# Create a normalized stack for viewing
-	im_display = np.zeros((im_aligned.shape[0],im_aligned.shape[1],5), dtype=np.float32 )
+	im_display = np.zeros(
+		(im_aligned.shape[0], im_aligned.shape[1], 5), dtype=np.float32)
 
-	for i in range(0,im_aligned.shape[2]):
-	    im_display[:,:,i] =  imageutils.normalize(im_aligned[:,:,i])
+	for j in range(0, im_aligned.shape[2]):
+		im_display[:, :, j] = imageutils.normalize(im_aligned[:, :, j])
 
-	rgb = im_display[:,:,[2,1,0]]
-	cir = im_display[:,:,[3,2,1]]
-	fig, axes = plt.subplots(1, 2, figsize=(16,16))
+	rgb = im_display[:, :, [2, 1, 0]]
+	cir = im_display[:, :, [3, 2, 1]]
+	fig, axes = plt.subplots(1, 2, figsize=(16, 16))
 	plt.title("Red-Green-Blue Composite")
 	axes[0].imshow(rgb)
 	plt.title("Color Infrared (CIR) Composite")
 	axes[1].imshow(cir)
 	plt.show()
+
+	# ## Image Enhancement
+	#
+	# There are many techniques for image enhancement, but one which is commonly used to improve the visual sharpness of imagery is the unsharp mask.  Here we apply an unsharp mask to the RGB image to improve the visualization, and then apply a gamma curve to make the darkest areas brighter.
+	# Create an enhanced version of the RGB render using an unsharp mask
+	gaussian_rgb = cv2.GaussianBlur(rgb, (9,9), 10.0)
+	gaussian_rgb[gaussian_rgb<0] = 0
+	gaussian_rgb[gaussian_rgb>1] = 1
+	unsharp_rgb = cv2.addWeighted(rgb, 1.5, gaussian_rgb, -0.5, 0)
+	unsharp_rgb[unsharp_rgb<0] = 0
+	unsharp_rgb[unsharp_rgb>1] = 1
+
+	# Apply a gamma correction to make the render appear closer to what our eyes would see
+	gamma = 1.4
+	gamma_corr_rgb = unsharp_rgb**(1.0/gamma)
+	fig = plt.figure(figsize=(18,18))
+	plt.imshow(gamma_corr_rgb, aspect='equal')
+	plt.axis('off')
+	plt.show()
+	# ## Image Export
+	#
+	# Composite images can be exported to JPEG or PNG format using the `imageio` package.  These images may be useful for visualization or thumbnailing, and creating RGB thumbnails of a set of images can provide a convenient way to browse the imagery in a more visually appealing way that browsing the raw imagery.
+	imtype = 'jpg' # or 'jpg'
+	print("Writing Images")
+	imageio.imwrite('img' + str(i + firstNonPanelImg) + '-rgb.'+imtype, (255*gamma_corr_rgb).astype('uint8'))
+	imageio.imwrite('img' + str(i + firstNonPanelImg) + '-cir.'+imtype, (255*cir).astype('uint8'))
