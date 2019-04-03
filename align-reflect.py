@@ -76,15 +76,15 @@ for i in range(numImages):
 
 	panelCap = capture.Capture.from_filelist(panelNames)
 	captures.append(capture.Capture.from_filelist(imageNames))
-	panel_reflectance_by_band = [0.67, 0.69, 0.68,
-								 0.61, 0.67]  # RedEdge band_index order
+	panel_reflectance_by_band = [51.5, 51.5, 51.3,
+								 50.8, 51.1]  # RedEdge band_index order
 	panel_irradiance = panelCap.panel_irradiance(panel_reflectance_by_band)
 	captures[i].plot_undistorted_reflectance(panel_irradiance)
 	#
 	print("Alinging images. Depending on settings this can take from a few seconds to many minutes")
 	# Increase max_iterations to 1000+ for better results, but much longer runtimes
 	warp_matrices, alignment_pairs = imageutils.align_capture(
-		captures[i], max_iterations=100)
+		captures[i], max_iterations=500)
 
 	print("Finished Aligning, warp matrices:")
 	for j, mat in enumerate(warp_matrices):
