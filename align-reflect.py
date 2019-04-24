@@ -21,9 +21,9 @@ imagesPath = os.path.join('.', 'MicasenseImagesPanels')
 # allImages = os.listdir(imagesPath)
 cwd = os.getcwd()
 panelPath = os.path.join(
-	'.', 'MicasenseImagesPanels', 'IMG_0009_*.tif')
+	'.', 'MicasenseImagesPanels', 'IMG_0007_*.tif')
 panelNames = glob.glob(os.path.join(
-	'.', 'MicasenseImagesPanels', 'IMG_0009_*.tif'))
+	'.', 'MicasenseImagesPanels', 'IMG_0007_*.tif'))
 # for panelName in panelNames:
 # 	meta = metadata.Metadata(panelName, exiftoolPath)
 # 	img = image.Image(panelName)
@@ -63,6 +63,7 @@ panelNames = glob.glob(os.path.join(
 
 firstNonPanelImg = 13
 numImages = 196
+numIterations = 500
 
 captures = []
 for i in range(numImages):
@@ -76,15 +77,15 @@ for i in range(numImages):
 
 	panelCap = capture.Capture.from_filelist(panelNames)
 	captures.append(capture.Capture.from_filelist(imageNames))
-	panel_reflectance_by_band = [51.5, 51.5, 51.3,
-								 50.8, 51.1]  # RedEdge band_index order
+	panel_reflectance_by_band = [.515, .515, .513,
+								 .508, .511]  # RedEdge band_index order
 	panel_irradiance = panelCap.panel_irradiance(panel_reflectance_by_band)
 	captures[i].plot_undistorted_reflectance(panel_irradiance)
-	#
+
 	print("Alinging images. Depending on settings this can take from a few seconds to many minutes")
 	# Increase max_iterations to 1000+ for better results, but much longer runtimes
 	warp_matrices, alignment_pairs = imageutils.align_capture(
-		captures[i], max_iterations=500)
+		captures[i], max_iterations=numIterations)
 
 	print("Finished Aligning, warp matrices:")
 	for j, mat in enumerate(warp_matrices):
@@ -149,6 +150,18 @@ for i in range(numImages):
 	#
 	# Composite images can be exported to JPEG or PNG format using the `imageio` package.  These images may be useful for visualization or thumbnailing, and creating RGB thumbnails of a set of images can provide a convenient way to browse the imagery in a more visually appealing way that browsing the raw imagery.
 	imtype = 'jpg' # or 'jpg'
+	outFolderName = "Aligned-iter" + str(numIterations)
+	outFolderPath = os.path.join('.', outFolderName)
+
+	if not os.path.isdir(outFolderPath):
+		os.mkdir(outFolderPath)
+
+	outFileNameRGB = 'img' + str(i + firstNonPanelImg) + '-rgb.'+imtype
+	outFilePathRGB = os.path.join(outFolderPath, outFileNameRGB)
+
+	outFileNameCIR = 'img' + str(i + firstNonPanelImg) + '-cir.'+imtype
+	outFilePathCIR = os.path.join(outFolderPath, outFileNameCIR)
+
 	print("Writing Images")
-	imageio.imwrite('img' + str(i + firstNonPanelImg) + '-rgb.'+imtype, (255*gamma_corr_rgb).astype('uint8'))
-	imageio.imwrite('img' + str(i + firstNonPanelImg) + '-cir.'+imtype, (255*cir).astype('uint8'))
+	imageio.imwrite(outFilePathRGB, (255*gamma_corr_rgb).astype('uint8'))
+	imageio.imwrite(outFilePathCIR, (255*cir).astype('uint8'))
