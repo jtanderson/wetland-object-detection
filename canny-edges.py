@@ -36,7 +36,6 @@ class App(QMainWindow):
 		self.edge_type = "scharr"
 		self.edge_folders = {}
 		self.qim = 0
-		self.label_im = 0
 		self.initUI()
 
 	def initUI(self):
@@ -68,12 +67,13 @@ class App(QMainWindow):
 			if self.current_edges_folder not in self.edge_folders:
 				self.edge_folders.append(self.current_edges_folder)
 			directory = os.fsencode(dir)
-			for file in reversed(sorted(os.listdir(directory))):
-				print("file:" + str(file))
-				self.current_file_name = os.fsdecode(file)
-				im_type = self.current_file_name.split('.')[-1]
-				img_path = f"{dir}/{self.current_file_name}"
-				out_file_name = self.current_file_name.split('.')[0] + "-edges." + im_type
+			for file in os.listdir(directory):
+				file_name = os.fsdecode(file)
+				im_type = file_name.split('.')[-1]
+				img_path = f"{dir}/{file_name}"
+				# print("name", file_name)
+				# print("dir", dir)
+				out_file_name = file_name.split('.')[0] + "-edges." + im_type
 				out_image_path = os.path.join(dir+"-" + self.edge_type + "edges", out_file_name)
 				if not os.path.isdir(dir+"-" + self.edge_type + "edges"):
 					os.mkdir(dir+"-" + self.edge_type + "edges")
@@ -105,14 +105,6 @@ class App(QMainWindow):
 
 	@qtc.pyqtSlot()
 	def next_image_clicker(self):
-		if self.qim:#save labels
-			out_dir = self.current_edges_folder.split('-')[-1] + "-labels"
-			if not os.path.isdir(out_dir):
-				os.mkdir(out_dir)
-			filename_split = self.current_file_name.split('.')
-			file_path = os.path.join('.', out_dir, filename_split[0] + "-labels." + filename_split[1])
-			print("labelled data path:" + file_path)
-			self.label_im.save(file_path)
 		self.show_next_img()
 
 	def show_next_img(self):
@@ -120,7 +112,6 @@ class App(QMainWindow):
 		open_image_path = self.edge_folders[self.current_edges_folder].pop()
 		print(f"current folder: {self.current_edges_folder}\nfile: {open_image_path}")
 		self.qim = QImage(open_image_path)
-		self.label_im = QImage(self.qim.width(), self.qim.height(), QImage.Format_RGB32)
 		self.update_qpix()
 
 	def label_object(self , event):
@@ -131,7 +122,7 @@ class App(QMainWindow):
 		self.floodfill_queue(x, y)
 
 	def floodfill_queue(self, x, y):
-		qim_max = self.qim.width()
+		qim_max = self.qim.size().width()
 		while_tol = 15
 		q = [(x, y)]
 		touched = []
@@ -186,7 +177,6 @@ class App(QMainWindow):
 	def set_pix_color(self, x, y, c):
 		color = QColor(c[0], c[1], c[2])
 		self.qim.setPixel(x, y, color.rgb())
-		self.label_im.setPixel(x, y, color.rgb())
 
 	def update_qpix(self):
 		self.pixmap = QPixmap(self.qim)
